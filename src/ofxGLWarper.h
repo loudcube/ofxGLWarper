@@ -77,7 +77,7 @@ public:
 
     ofParameter<glm::vec2> corners[4];
 
-private:
+protected:
 	int x, y;
 	int  width; //width of the quad to work with
 	int	 height; // height of the quad to work with
