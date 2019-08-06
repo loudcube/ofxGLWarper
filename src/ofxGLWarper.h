@@ -26,20 +26,23 @@ public:
 	void setup();		
 	void setup(int _resX, int _resY); //changed to have resolution as parameter for the quad
 	void setup(int _x, int _y, int _w, int _h);
-	void draw();	// nowthis method draw the bounding box for the warped elements. intended to be a visual aid.
+
+    void reSetupWarped(int _x, int _y, int _w, int _h); // allows you to redefine base rectangle without losing the current warping.
+
+    void draw();	// This is deprecated (included in end()). Please check the drawSettings structure below.
 	void begin();	//changed name from draw to begin
 	void end();		//added to make it easier to use, similar to ofFbo (begin,end)
 		
 	void mouseDragged(ofMouseEventArgs &args);
 	void mousePressed(ofMouseEventArgs &args);
-    void mouseReleased(ofMouseEventArgs &args){}
+	void mouseReleased(ofMouseEventArgs &args);
     void mouseMoved(ofMouseEventArgs &args){}
     void mouseScrolled(ofMouseEventArgs &args){}
     void mouseEntered(ofMouseEventArgs &args){}
     void mouseExited(ofMouseEventArgs &args){}
     void keyPressed(ofKeyEventArgs &args);
-    void keyReleased(ofKeyEventArgs &args){}
-    
+	void keyReleased(ofKeyEventArgs &args);
+	
     void processMatrices();
 
     void save(const string& saveFile = "warpConfig.xml");
@@ -59,30 +62,50 @@ public:
     void toggleMouse();
 
     glm::vec4 fromScreenToWarpCoord(float x,float y,float z = 0);
+    glm::vec4 fromScreenToWarpCoord(const glm::vec4 &position);
     glm::vec4 fromWarpToScreenCoord(float x,float y,float z = 0);
+    glm::vec4 fromWarpToScreenCoord(const glm::vec4 &position);
 
     void selectCorner(CornerLocation cornerLocation);
-    void setCorner(CornerLocation cornerLocation, glm::vec2 &onScreenLocation);
+    void setCorner(CornerLocation cornerLocation, const glm::vec2 &onScreenLocation);
     void setCorner(CornerLocation cornerLocation, float onScreenLocationX, float onScreenLocationY);
-    void moveCorner(CornerLocation cornerLocation, glm::vec2 &moveBy);
+    void moveCorner(CornerLocation cornerLocation, const glm::vec2 &moveBy);
     void moveCorner(CornerLocation cornerLocation, float byX, float byY);
     glm::vec2 getCorner(CornerLocation cornerLocation);
 
-    void setAllCorners(glm::vec2 &top_left, glm::vec2 &top_right, glm::vec2 &bot_left, glm::vec2 &bot_right);
-    void moveAllCorners(glm::vec2 &moveBy);
+    void setAllCorners(const glm::vec2 &top_left, const glm::vec2 &top_right, const glm::vec2 &bot_left, const glm::vec2 &bot_right);
+    void moveAllCorners(const glm::vec2 &moveBy);
     void moveAllCorners(float byX, float byY);
+
+	ofRectangle getBaseRectangle(); // gets you the rect used to setup
+	bool getCornerIsSelected();
+	CornerLocation getSelectedCornerLocation();
 
     void setCornerSensibility(float sensibility);
     float getCornerSensibility();
 
     ofParameter<glm::vec2> corners[4];
 
+    struct drawSettings{
+        bool bDrawCorners = true;
+        bool bDrawRectangle = true;
+        bool bForceDrawing = false; // Draws warper even if not active.
+        ofColor selectedCornerColor = ofColor(255, 0, 0);
+        ofColor cornersColor = ofColor(255, 255, 0);
+        ofColor rectangleColor = ofColor(255, 255, 255);
+    };
+    drawSettings drawSettings;
+
 private:
+	ofPolyline cornersPoly;
 	int x, y;
 	int  width; //width of the quad to work with
 	int	 height; // height of the quad to work with
     bool active = false;
     int selectedCorner;
+	bool bMoveAll = false;
+	glm::vec2 mousePressPos;
+	
     glm::mat4 myMatrix;
     float cornerSensibility;
     bool cornerIsSelected;
@@ -90,5 +113,5 @@ private:
     bool bUseMouse = false; // false before a setup
 };
 
-#endif	
+#endif
 

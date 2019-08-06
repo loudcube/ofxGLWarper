@@ -36,8 +36,33 @@ void ofxGLWarper::setup(int _x, int _y, int _w, int _h){
     bUseKeys = true;
     bUseMouse = true;
 
+	if(cornersPoly.size() != 4){
+		cornersPoly.clear();
+		for(int i = 0; i < 4; i++){
+			cornersPoly.addVertex(corners[i]->x, corners[i]->y);
+		}
+		cornersPoly.close();
+	}
+	
     processMatrices();
 }
+
+//--------------------------------------------------------------
+void ofxGLWarper::reSetupWarped(int _x, int _y, int _w, int _h){
+
+    corners[TOP_LEFT] =     glm::vec2(fromScreenToWarpCoord( _x      , _y        ));
+    corners[TOP_RIGHT] =    glm::vec2(fromScreenToWarpCoord( _x + _w , _y        ));
+    corners[BOTTOM_RIGHT] = glm::vec2(fromScreenToWarpCoord( _x + _w , _y + _h   ));
+    corners[BOTTOM_LEFT] =  glm::vec2(fromScreenToWarpCoord( _x      , _y + _h   ));
+
+    x=_x;
+    y=_y;
+    width=_w;
+    height=_h;
+
+    processMatrices();
+}
+
 //--------------------------------------------------------------
 bool ofxGLWarper::isActive(){
     return active;
@@ -119,17 +144,21 @@ void ofxGLWarper::processMatrices(){
 
     //figure out the warping!
     myMatrix = ofxHomography::findHomography(cvsrc, cvdst);
+	
+	
+	if(cornersPoly.size() == 4){
+	
+		auto& v = cornersPoly.getVertices();
+		for(int i = 0; i < 4; i++){
+			v[i] =  {corners[i]->x, corners[i]->y, 0};
+		}
+	}else{
+		ofLogError("ofxGLWarper::processMatrices") << "cornersPoly size is not 4. Probably setup() was not called!";
+	}
 
 }
 //--------------------------------------------------------------
-void ofxGLWarper::draw(){
-    if (active) {
-        ofPushStyle();
-        ofSetColor(255, 255, 255);
-        ofNoFill();
-        ofDrawRectangle(x, y, width, height);
-        ofPopStyle();
-    }
+void ofxGLWarper::draw(){ // Deprecated (included in end()). Please check the drawSettings structure.
 }
 //--------------------------------------------------------------
 void ofxGLWarper::begin(){
@@ -139,16 +168,22 @@ void ofxGLWarper::begin(){
 }
 //--------------------------------------------------------------
 void ofxGLWarper::end(){
-    ofPopMatrix();
-    if (active) {// this draws colored squares over the corners as a visual aid.
+    if ((drawSettings.bDrawRectangle && active) || (drawSettings.bDrawRectangle && drawSettings.bForceDrawing)) {
         ofPushStyle();
+        ofSetColor(drawSettings.rectangleColor);
+        ofNoFill();
+        ofDrawRectangle(x, y, width, height);
+    }
+    ofPopMatrix();
+    if ((drawSettings.bDrawCorners && active) || (drawSettings.bDrawCorners && drawSettings.bForceDrawing)) {// this draws colored squares over the corners as a visual aid.
         ofSetRectMode(OF_RECTMODE_CENTER);
         for (int i = 0; i < 4; i++) {
             if(i==selectedCorner){
-                ofSetColor(255, 0, 0);
+                ofSetColor(drawSettings.selectedCornerColor);
             }else{
-                ofSetColor(255, 255, 0);
+                ofSetColor(drawSettings.cornersColor);
             }
+            ofFill();
             ofDrawRectangle(corners[i], 10, 10);
         }
         ofPopStyle();
@@ -211,14 +246,26 @@ void ofxGLWarper::loadFromXml(ofXml &XML, const string& warperID){
 }
 //--------------------------------------------------------------
 void ofxGLWarper::mouseDragged(ofMouseEventArgs &args){
-    if(cornerIsSelected && selectedCorner >= 0){
+	if(!ofGetKeyPressed(OF_KEY_SHIFT) && bMoveAll){
+		bMoveAll = false;
+	}
+	if(bMoveAll){
+		moveAllCorners(args - mousePressPos);
+		mousePressPos = args;
+	}else{
+	if(cornerIsSelected && selectedCorner >= 0){
         corners[selectedCorner] = glm::vec2(args.x, args.y);
     }
+	}
     processMatrices();
 }
 //--------------------------------------------------------------
 void ofxGLWarper::mousePressed(ofMouseEventArgs &args){
-
+	if(ofGetKeyPressed(OF_KEY_SHIFT) && cornersPoly.inside(args.x, args.y)){
+		bMoveAll = true;
+		mousePressPos = args;
+	}else{
+		bMoveAll = false;
     float smallestDist = sqrtf(ofGetWidth() * ofGetWidth() + ofGetHeight() * ofGetHeight());
     //selectedCorner = -1;
     float sensFactor = cornerSensibility * sqrtf( width  * width  + height  * height );
@@ -235,10 +282,15 @@ void ofxGLWarper::mousePressed(ofMouseEventArgs &args){
             cornerIsSelected=true;
         }
     }
+	}
 }
-
+//--------------------------------------------------------------
+void ofxGLWarper::mouseReleased(ofMouseEventArgs &args){
+//	cornerIsSelected = false;
+}
 //--------------------------------------------------------------
 void ofxGLWarper::keyPressed(ofKeyEventArgs &args){
+
     if (cornerIsSelected && selectedCorner >= 0) {
         switch (args.key) {
             case OF_KEY_DOWN:
@@ -262,15 +314,18 @@ void ofxGLWarper::keyPressed(ofKeyEventArgs &args){
 		}
 	}
 }
-
+//--------------------------------------------------------------
+void ofxGLWarper::keyReleased(ofKeyEventArgs &args){
+	
+}
  //--------------------------------------------------------------
 glm::vec4 ofxGLWarper::fromScreenToWarpCoord(float x, float y, float z){
     glm::vec4 mousePoint;
     glm::vec4 warpedPoint;
 
     // this is the point on the image which i want to know the coordinates inside the warped system ...
-    mousePoint.x = x;
-    mousePoint.y = y;
+    mousePoint.x = x - (this->x);
+    mousePoint.y = y - (this->y);
     mousePoint.z = z;
     mousePoint.w = 1.0;
 
@@ -286,6 +341,9 @@ glm::vec4 ofxGLWarper::fromScreenToWarpCoord(float x, float y, float z){
     warpedPoint.z = warpedPoint.z / warpedPoint.w;
 
     return warpedPoint;
+}
+glm::vec4 ofxGLWarper::fromScreenToWarpCoord(const glm::vec4 &position){
+    return fromScreenToWarpCoord(position.x, position.y, position.z);
 }
  //--------------------------------------------------------------
 glm::vec4 ofxGLWarper::fromWarpToScreenCoord(float x, float y, float z){
@@ -304,14 +362,18 @@ glm::vec4 ofxGLWarper::fromWarpToScreenCoord(float x, float y, float z){
     // multiply both to get the point transformed by the matrix
     warpedPoint = invertedMyMatrix * mousePoint ;
 
-    warpedPoint.x = warpedPoint.x / warpedPoint.w;
-    warpedPoint.y = warpedPoint.y / warpedPoint.w;
+    warpedPoint.x = warpedPoint.x / warpedPoint.w + (this->x);
+    warpedPoint.y = warpedPoint.y / warpedPoint.w + (this->y);
     warpedPoint.z = warpedPoint.z / warpedPoint.w;
 
     return warpedPoint;
 }
+glm::vec4 ofxGLWarper::fromWarpToScreenCoord(const glm::vec4 &position){
+    return fromWarpToScreenCoord(position.x, position.y, position.z);
+}
+
 //--------------------------------------------------------------
-void ofxGLWarper::setAllCorners(glm::vec2 &top_left, glm::vec2 &top_right, glm::vec2 &bot_left, glm::vec2 &bot_right){
+void ofxGLWarper::setAllCorners(const glm::vec2 &top_left, const glm::vec2 &top_right, const glm::vec2 &bot_left, const glm::vec2 &bot_right){
     //if you want to set all corners and avoid 3 useless processMatrices()
     corners[TOP_LEFT] = top_left;
     corners[TOP_RIGHT] = top_right;
@@ -321,7 +383,7 @@ void ofxGLWarper::setAllCorners(glm::vec2 &top_left, glm::vec2 &top_right, glm::
     processMatrices();
 }
 //--------------------------------------------------------------
-void ofxGLWarper::moveAllCorners(glm::vec2 &moveBy){
+void ofxGLWarper::moveAllCorners(const glm::vec2 &moveBy){
     for (int i = 0; i < 4; ++i) {
         corners[i] += moveBy;
     }
@@ -336,7 +398,7 @@ void ofxGLWarper::selectCorner(CornerLocation cornerLocation){
     selectedCorner = cornerLocation;
 }
 //--------------------------------------------------------------
-void ofxGLWarper::setCorner(CornerLocation cornerLocation, glm::vec2 &onScreenLocation){
+void ofxGLWarper::setCorner(CornerLocation cornerLocation, const glm::vec2 &onScreenLocation){
     corners[cornerLocation] = onScreenLocation;// glm::vec2(width, height);
     processMatrices();
 }
@@ -346,7 +408,7 @@ void ofxGLWarper::setCorner(CornerLocation cornerLocation, float onScreenLocatio
     processMatrices();
 }
 //--------------------------------------------------------------
-void ofxGLWarper::moveCorner(CornerLocation cornerLocation, glm::vec2 &moveBy){
+void ofxGLWarper::moveCorner(CornerLocation cornerLocation, const glm::vec2 &moveBy){
         corners[cornerLocation] += moveBy;
         processMatrices();
 }
@@ -366,4 +428,19 @@ void ofxGLWarper::setCornerSensibility(float sensibility){
 //--------------------------------------------------------------
 float ofxGLWarper::getCornerSensibility(){
     return cornerSensibility;
+}
+//--------------------------------------------------------------
+ofRectangle ofxGLWarper::getBaseRectangle(){
+	return ofRectangle(x,y,width,height); // gets you the rect used to setup
+}
+//--------------------------------------------------------------
+bool ofxGLWarper::getCornerIsSelected(){
+	return cornerIsSelected && selectedCorner >= 0;
+}
+//--------------------------------------------------------------
+// When no corner is selected ( getCornerIsSelected() == false ) :
+// getSelectedCornerLocation() < static_cast<ofxGLWarper::CornerLocation>(0)
+ofxGLWarper::CornerLocation ofxGLWarper::getSelectedCornerLocation(){
+	ofxGLWarper::CornerLocation corner_loc = static_cast<ofxGLWarper::CornerLocation>(selectedCorner);
+	return corner_loc;
 }
